@@ -1,9 +1,9 @@
 import 'https://lsong.org/scripts/components/piano-keyboard.js';
 import 'https://lsong.org/scripts/components/spectrum-analyzer.js';
-import { createAudioContext, playNote, stopNote } from 'https://lsong.org/scripts/audio.js';
+import { createAudioContext, playNote } from 'https://lsong.org/scripts/audio.js?v1';
 
 let audioContext, analyser;
-let currentOscillator = null;
+let currentNote = null;
 let isRecording = false;
 let recordedNotes = [];
 let startTime;
@@ -29,15 +29,17 @@ function initAudio() {
 
 function startNote(note) {
   keyboard.activateKey(note);
-  currentOscillator = playNote(audioContext, analyser, note);
+  currentNote = playNote(audioContext, note);
   if (isRecording) {
     recordedNotes.push({ note, time: Date.now() - startTime });
   }
 }
 
 function endNote() {
-  stopNote(currentOscillator);
-  currentOscillator = null;
+  if (currentNote) {
+    currentNote.stop(audioContext.currentTime);
+    currentNote = null;
+  }
 }
 
 keyboard.addEventListener('notestart', (e) => startNote(e.detail.note));
@@ -48,7 +50,7 @@ recordBtn.addEventListener('click', () => {
     isRecording = true;
     recordedNotes = [];
     startTime = Date.now();
-    recordBtn.textContent = 'Stop';
+    recordBtn.textContent = 'Stop Recording';
     playBtn.disabled = true;
   } else {
     isRecording = false;
@@ -62,12 +64,11 @@ playBtn.addEventListener('click', () => {
   playBtn.disabled = true;
   stopBtn.disabled = false;
 
-  const startPlayTime = audioContext.currentTime;
   recordedNotes.forEach(({ note, time }) => {
     setTimeout(() => {
-      const osc = playNote(audioContext, analyser, note);
+      const noteSound = playNote(audioContext, note);
       keyboard.activateKey(note);
-      setTimeout(() => stopNote(osc), 100);
+      setTimeout(() => noteSound.stop(audioContext.currentTime), 500);
     }, time);
   });
 
@@ -75,7 +76,7 @@ playBtn.addEventListener('click', () => {
     recordBtn.disabled = false;
     playBtn.disabled = false;
     stopBtn.disabled = true;
-  }, recordedNotes[recordedNotes.length - 1].time);
+  }, recordedNotes[recordedNotes.length - 1].time + 500);
 });
 
 stopBtn.addEventListener('click', () => {
@@ -100,7 +101,7 @@ const lessons = {
 for (const name in lessons) {
   const option = document.createElement('option');
   option.value = name;
-  option.textContent = name;
+  option.textContent = name.charAt(0).toUpperCase() + name.slice(1);
   lessonSelect.appendChild(option);
 }
 
@@ -121,11 +122,7 @@ lessonSelect.addEventListener('change', () => {
 });
 
 showNotesCheckbox.addEventListener('change', (e) => {
-  if (e.target.checked) {
-    keyboard.setAttribute('show-notes', '');
-  } else {
-    keyboard.removeAttribute('show-notes');
-  }
+  keyboard.toggleAttribute('show-notes', e.target.checked);
 });
 
 // 键盘按键绑定
@@ -135,7 +132,7 @@ const keyBindings = {
 };
 
 document.addEventListener('keydown', (e) => {
-  if (!audioContext) return;  // 如果音频上下文未初始化，不响应键盘事件
+  if (!audioContext) return;
   const note = keyBindings[e.key];
   if (note && !e.repeat) {
     startNote(note);
